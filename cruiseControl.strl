@@ -1,0 +1,60 @@
+% firstly just want to get a program to work where the cruise state can be correctly determined.
+
+
+module cruiseStateManager:
+% interface declerations
+input onButton;
+input offButton;
+input resumeButton;
+input breakPressed;
+input accelerationPressed;
+
+output cruiseState : string;
+
+var state := "OFF" : string in
+
+loop
+	abort
+		loop
+			emit cruiseState (state);
+			pause;
+		end loop
+	when onButton;
+	
+	% immediately turn on
+	state := "ON";
+
+	
+	abort
+		loop
+			abort 
+				loop
+					abort
+						loop
+							present resumeButton then
+								state := "ON";
+							end present;
+							
+							emit cruiseState (state);
+						% future emit internal signal to other modules
+							pause;
+						end loop
+					when immediate [accelerationPressed];
+					
+					state := "DISABLE";
+					emit cruiseState (state);
+					pause;
+				end loop
+			when immediate [breakPressed];
+			
+			state := "STDBY";
+			emit cruiseState (state);
+			pause;
+		
+		end loop
+	when immediate [offButton];
+	
+	state := "OFF";
+end loop
+end var
+end module
