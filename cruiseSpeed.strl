@@ -1,0 +1,47 @@
+module cruiseSpeedManager:
+
+input speed : float;
+input cruiseState : string;
+
+input onButton;
+input offButton;
+
+input setButton;
+input decrementButton;
+input incrementButton;
+
+output cruiseSpeed : float;
+
+var state := 0.0f : float in
+
+await onButton;
+state := ?speed;
+
+loop
+	trap T in
+		loop
+			if not ?cruiseState = "ON" then
+				exit T;
+			end if;
+			present
+				case [incrementButton] do
+					state := state + 2.5f;
+				case [decrementButton] do
+					state := state - 2.5f;
+				case [setButton] do
+					state := ?speed;
+			end present;
+			
+			% need some logic to make sure speed is within boundaries etc..
+			
+			emit cruiseSpeed (state);
+			pause;
+		end loop
+		
+	end trap;
+	
+	emit cruiseSpeed (state);
+	pause;
+end loop
+end var
+end module
