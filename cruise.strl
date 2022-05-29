@@ -1,0 +1,145 @@
+% firstly
+
+module cruiseMain:
+
+% both requiring signals
+
+
+% cruiseController signals
+input onButton;
+input offButton;
+input resumeButton;
+
+
+input Break : float;
+input Accel : float;
+input speed : float;
+
+% cruiseSpeedController signals
+input setButton;
+input decrementButton;
+input incrementButton;
+
+output cruiseSpeed : float;
+output cruiseState : string;
+
+signal A in
+
+[
+var state := "OFF" : string in
+
+loop
+	abort
+		loop
+			emit cruiseState (state);
+			pause;
+		end loop
+	when onButton;
+	
+	% immediately turn on
+	state := "ON";
+
+	
+	abort
+		loop
+			trap breakT in
+				loop
+					trap accT in
+						loop
+							if (?Break > 3.0f) then
+								exit breakT;
+							end if;
+								
+							if (?Accel > 3.0f) then
+								exit accT;
+							end if;
+							
+
+							
+							present resumeButton then
+								state := "ON";
+							end present;
+							
+							if state = "ON" then
+								emit A;
+							end if;
+							
+							emit cruiseState (state);
+							pause;
+						end loop
+					end trap;
+					
+					state := "DISABLE";
+					emit cruiseState (state);
+					pause;
+				end loop
+			end trap;
+			
+			state := "STDBY";
+			emit cruiseState (state);
+			pause;
+		
+		end loop
+	when immediate [offButton];
+	
+	state := "OFF";
+end loop
+end var
+
+]
+||
+[
+var state := 0.0f : float in
+
+await A;
+present (speed) then
+	state := ?speed;
+end present;	
+
+loop
+	trap T in
+		loop
+			present (A) then 
+				nothing
+			else 
+				exit T;
+			end present;
+			
+			present
+				case [incrementButton] do
+					state := state + 2.5f;
+				case [decrementButton] do
+					state := state - 2.5f;
+				case [setButton] do
+					state := ?speed;
+			end present;
+			
+			% need some logic to make sure speed is within boundaries etc..
+			if state < 30.0f then
+				state := 30.0f;
+			end if;
+			if state > 125.0f then
+				state := 125.0f;
+			end if;
+			
+			
+			emit cruiseSpeed (state);
+			pause;
+		end loop
+		
+	end trap;
+	
+	emit cruiseSpeed (state);
+	pause;
+end loop
+end var
+]
+
+% run cruiseSpeedManager[ signal speed/speed;
+%			 signal setButton/setButton;
+%			 signal decrementButton/decrementButton;
+%			 signal incrementButton/incrementButton;
+%			 signal cruiseSpeed/cruiseSpeed;
+%			 signal A/A]
+end signal
+end module
