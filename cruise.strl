@@ -22,8 +22,12 @@ input incrementButton;
 
 output cruiseSpeed : float;
 output cruiseState : string;
+output throttleCmd : float;
+
+function regulateThrottle(bool, float, float) : float;
 
 signal A in
+var goingOn := 0 : integer in
 
 [
 var state := "OFF" : string in
@@ -38,8 +42,8 @@ loop
 	
 	% immediately turn on
 	state := "ON";
+    goingOn := 1;
 
-	
 	abort
 		loop
 			trap breakT in
@@ -54,10 +58,10 @@ loop
 								exit accT;
 							end if;
 							
-
-							
+                            goingOn := 0;
 							present resumeButton then
 								state := "ON";
+                                goingOn := 1;
 							end present;
 							
 							if state = "ON" then
@@ -121,7 +125,8 @@ loop
 			if state > 125.0f then
 				state := 125.0f;
 			end if;
-			
+
+            emit throttleCmd(regulateThrottle(goingOn, ?cruiseSpeed, ?speed));
 			
 			emit cruiseSpeed (state);
 			pause;
@@ -142,4 +147,5 @@ end var
 %			 signal cruiseSpeed/cruiseSpeed;
 %			 signal A/A]
 end signal
+end var
 end module
