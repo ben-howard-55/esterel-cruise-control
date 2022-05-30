@@ -126,7 +126,7 @@ loop
 				state := 125.0f;
 			end if;
 
-            emit throttleCmd(regulateThrottle(goingOn, ?cruiseSpeed, ?speed));
+            emit throttleCmd(regulateThrottle(goingOn, state, ?speed));
 			
 			emit cruiseSpeed (state);
 			pause;
