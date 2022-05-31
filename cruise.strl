@@ -1,5 +1,3 @@
-% firstly
-
 module cruiseMain:
 
 % both requiring signals
@@ -15,6 +13,8 @@ input Break : float;
 input Accel : float;
 input speed : float;
 
+% relation Break # Accel;
+
 % cruiseSpeedController signals
 input setButton;
 input decrementButton;
@@ -24,10 +24,10 @@ output cruiseSpeed : float;
 output cruiseState : string;
 output throttleCmd : float;
 
-function regulateThrottle(bool, float, float) : float;
+function regulateThrottle(boolean, float, float) : float;
 
-signal A in
-var goingOn := 0 : integer in
+signal A, B in
+signal goingOn in
 
 [
 var state := "OFF" : string in
@@ -42,7 +42,7 @@ loop
 	
 	% immediately turn on
 	state := "ON";
-    goingOn := 1;
+	emit goingOn;
 
 	abort
 		loop
@@ -58,15 +58,30 @@ loop
 								exit accT;
 							end if;
 							
-                            goingOn := 0;
+							if (?speed > 150.0f) then
+								exit accT;
+							end if;
+							
+							if (?speed < 30.0f) then
+								exit accT;
+							end if;
+							
+							% two options to enable
+							if (state = "DISABLE") then
+								state := "ON";
+								emit goingOn;
+							end if;
+							
 							present resumeButton then
 								state := "ON";
-                                goingOn := 1;
+                                				emit goingOn;
 							end present;
 							
 							if state = "ON" then
 								emit A;
 							end if;
+							
+							emit B;
 							
 							emit cruiseState (state);
 							pause;
@@ -75,12 +90,14 @@ loop
 					
 					state := "DISABLE";
 					emit cruiseState (state);
+					emit B;
 					pause;
 				end loop
 			end trap;
 			
 			state := "STDBY";
 			emit cruiseState (state);
+			emit B;
 			pause;
 		
 		end loop
@@ -94,8 +111,9 @@ end var
 ||
 [
 var state := 0.0f : float in
+var goingOnState := false : boolean in
+var throttleState := 0.0f : float in
 
-await A;
 present (speed) then
 	state := ?speed;
 end present;	
@@ -103,7 +121,7 @@ end present;
 loop
 	trap T in
 		loop
-			present (A) then 
+			present (B) then 
 				nothing
 			else 
 				exit T;
@@ -122,30 +140,43 @@ loop
 			if state < 30.0f then
 				state := 30.0f;
 			end if;
-			if state > 125.0f then
-				state := 125.0f;
+			if state > 150.0f then
+				state := 150.0f;
 			end if;
-
-            emit throttleCmd(regulateThrottle(goingOn, state, ?speed));
 			
+			% update throttle
+			present (A) then 
+				nothing
+			else 
+				exit T;
+			end present;
+			
+			
+			% throttle goingOn
+			goingOnState := false;
+			
+			present goingOn then
+				goingOnState := true;
+			end present;
+			
+			throttleState := regulateThrottle(goingOnState, state, ?speed);
+			emit throttleCmd (throttleState);
+								
 			emit cruiseSpeed (state);
 			pause;
 		end loop
 		
 	end trap;
 	
+	emit throttleCmd (?Accel);
+	
 	emit cruiseSpeed (state);
 	pause;
 end loop
 end var
-]
-
-% run cruiseSpeedManager[ signal speed/speed;
-%			 signal setButton/setButton;
-%			 signal decrementButton/decrementButton;
-%			 signal incrementButton/incrementButton;
-%			 signal cruiseSpeed/cruiseSpeed;
-%			 signal A/A]
-end signal
 end var
+end var
+]
+end signal
+end signal
 end module
