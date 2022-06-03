@@ -1,51 +1,49 @@
-% firstly
+% Esterel Cruise Controller
+% Authors: Benjamin Howard
+%	   Peter Goedeke
+% Date: 3-06-2022
 
-module cruiseMain:
 
-% both requiring signals
+% CruiseStateModule is responsible for determing which cruiseState the system is to be in.
+% It sends signals A, B, and goingOn to the speedController, depending on cruiseState.
+module CruiseStateModule:
 
+output CruiseState : string;
 
-% cruiseController signals
+input Break : float;
+input Accel : float;
+input Speed : float;
+
 input onButton;
 input offButton;
 input resumeButton;
 
+output A;
+output B;
+output goingOn;
 
-input Break : float;
-input Accel : float;
-input speed : float;
 
-% cruiseSpeedController signals
-input setButton;
-input decrementButton;
-input incrementButton;
-
-output cruiseSpeed : float;
-output cruiseState : string;
-
-signal A in
-
-[
 var state := "OFF" : string in
 
 loop
 	abort
 		loop
-			emit cruiseState (state);
+			emit CruiseState (state);
 			pause;
 		end loop
 	when onButton;
 	
 	% immediately turn on
 	state := "ON";
+	emit goingOn;
 
-	
 	abort
 		loop
 			trap breakT in
 				loop
 					trap accT in
 						loop
+							% list of conditions for state being not ON
 							if (?Break > 3.0f) then
 								exit breakT;
 							end if;
@@ -54,29 +52,47 @@ loop
 								exit accT;
 							end if;
 							
-
+							if (?Speed > 150.0f) then
+								exit accT;
+							end if;
 							
+							if (?Speed < 30.0f) then
+								exit accT;
+							end if;
+							
+							% two options to enable
+							if (state = "DISABLE") then
+								state := "ON";
+								emit goingOn;
+							end if;
+							
+							% resume
 							present resumeButton then
 								state := "ON";
+                                				emit goingOn;
 							end present;
 							
 							if state = "ON" then
 								emit A;
 							end if;
 							
-							emit cruiseState (state);
+							emit B;
+							
+							emit CruiseState (state);
 							pause;
 						end loop
 					end trap;
 					
 					state := "DISABLE";
-					emit cruiseState (state);
+					emit CruiseState (state);
+					emit B;
 					pause;
 				end loop
 			end trap;
 			
 			state := "STDBY";
-			emit cruiseState (state);
+			emit CruiseState (state);
+			emit B;
 			pause;
 		
 		end loop
@@ -85,21 +101,43 @@ loop
 	state := "OFF";
 end loop
 end var
+end module
 
-]
-||
-[
+
+
+% CruiseSpeedModule determines the CruiseSpeed and throttleCmd output determining on
+% CruiseState and system speed and acceleration.
+% also handles changing the cruiseSpeed by inc, dec, and set.
+module CruiseSpeedModule:
+
+input Speed : float;
+input Accel : float;
+
+input incrementButton;
+input decrementButton;
+input setButton;
+
+output ThrottleCmd : float;
+output CruiseSpeed : float;
+
+input A;
+input B;
+input goingOn;
+
+function regulateThrottle(boolean, float, float) : float;
+
 var state := 0.0f : float in
+var goingOnState := false : boolean in
+var throttleState := 0.0f : float in
 
-await A;
-present (speed) then
-	state := ?speed;
+present (Speed) then
+	state := ?Speed;
 end present;	
 
 loop
 	trap T in
 		loop
-			present (A) then 
+			present (B) then 
 				nothing
 			else 
 				exit T;
@@ -111,35 +149,105 @@ loop
 				case [decrementButton] do
 					state := state - 2.5f;
 				case [setButton] do
-					state := ?speed;
+					state := ?Speed;
 			end present;
 			
-			% need some logic to make sure speed is within boundaries etc..
+			% make sure speed is within boundaries etc..
 			if state < 30.0f then
 				state := 30.0f;
 			end if;
-			if state > 125.0f then
-				state := 125.0f;
+			if state > 150.0f then
+				state := 150.0f;
 			end if;
 			
+			% update throttle
+			present (A) then 
+				nothing
+			else 
+				exit T;
+			end present;
 			
-			emit cruiseSpeed (state);
+			
+			% throttle goingOn
+			goingOnState := false;
+			
+			present goingOn then
+				goingOnState := true;
+			end present;
+			
+			throttleState := regulateThrottle(goingOnState, state, ?Speed);
+			emit ThrottleCmd (throttleState);
+								
+			emit CruiseSpeed (state);
 			pause;
 		end loop
 		
 	end trap;
 	
-	emit cruiseSpeed (state);
+	emit ThrottleCmd (?Accel);
+	
+	emit CruiseSpeed (state);
 	pause;
 end loop
 end var
-]
+end var
+end var
+end module
 
-% run cruiseSpeedManager[ signal speed/speed;
-%			 signal setButton/setButton;
-%			 signal decrementButton/decrementButton;
-%			 signal incrementButton/incrementButton;
-%			 signal cruiseSpeed/cruiseSpeed;
-%			 signal A/A]
+
+% main module that puts both CruiseSpeedModule and CruiseStateModule into synchronous parallel.
+%provides signals for the communication between the submodules: A, B, onGoing.
+module cruiseMain:
+% cruiseController signals
+input onButton;
+input offButton;
+input resumeButton;
+
+
+input Break : float;
+input Accel : float;
+input Speed : float;
+
+% relation Break # Accel;
+
+% cruiseSpeedController signals
+input setButton;
+input decrementButton;
+input incrementButton;
+
+output CruiseSpeed : float;
+output CruiseState : string;
+output ThrottleCmd : float;
+
+signal A, B in
+signal goingOn in
+
+[
+	run CruiseStateModule[ signal CruiseState/CruiseState;
+				signal Break/Break;
+				signal Accel/Accel;
+				signal Speed/Speed;
+				signal onButton/onButton;
+				signal offButton/offButton;
+				signal resumeButton/resumeButton;
+				signal A/A;
+				signal B/B;
+				signal goingOn/goingOn ]
+]
+||
+[
+	run CruiseSpeedModule[ signal Speed/Speed;
+				signal Accel/Accel;
+				signal incrementButton/incrementButton;
+				signal decrementButton/decrementButton;
+				signal setButton/setButton;
+				signal ThrottleCmd/ThrottleCmd;
+				signal CruiseSpeed/CruiseSpeed;
+				signal A/A;
+				signal B/B;
+				signal goingOn/goingOn ]
+				
+]
+end signal
 end signal
 end module
